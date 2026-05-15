@@ -26,10 +26,9 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the hanko version",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "hanko %s (commit %s, built %s)\n",
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "hanko %s (commit %s, built %s)\n",
 				version.Version, version.Commit, version.BuildDate)
-			return nil
+			return err
 		},
 	}
 }
