@@ -1,0 +1,17 @@
+# CODEOWNERS — see https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# The user listed here is automatically requested for review on every PR
+# touching the matching path. Latest matching pattern wins, so put narrow
+# overrides below the catch-all.
+
+* @iahsanGill
+
+# Security-sensitive surfaces — flag explicitly so a careless change to
+# the signing / verification / attestation paths can't slip through.
+/pkg/attest/   @iahsanGill
+/pkg/bundle/   @iahsanGill
+/spec/         @iahsanGill
+/SECURITY.md   @iahsanGill
+
+# CI workflows: a change here can grant unintended secrets / perms.
+/.github/workflows/   @iahsanGill

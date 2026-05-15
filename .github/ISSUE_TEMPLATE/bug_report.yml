@@ -1,0 +1,47 @@
+name: Bug report
+description: Something hanko did wrong — wrong output, crash, security concern, etc.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug. Include the full error message if any.
+      placeholder: |
+        Running `hanko run --sigstore ...` against ghcr.io produced X, expected Y.
+        Error: ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps. Commands + flags + which registry/harness/model.
+      placeholder: |
+        1. `hanko key gen --out test.key`
+        2. `hanko run --model ...`
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: hanko version
+      description: Output of `hanko version`.
+      placeholder: "hanko 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, arch, Go version. Output of `go version` if hanko was built from source.
+      placeholder: "macOS 14.2 / arm64 / go1.26"
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Anything else
+      description: Logs, screenshots, OCI registry details, the OCI URL of a failing bundle if you can share it.
