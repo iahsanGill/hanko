@@ -1,0 +1,123 @@
+# End-to-end Sigstore-keyless smoke test.
+#
+# Manual-only (workflow_dispatch). Each run:
+#   1. signs a hanko bundle via Fulcio (Sigstore *staging*, NOT public-good
+#      — we don't want demo runs polluting the production Rekor log),
+#   2. pushes it to ghcr.io/<owner>/hanko-sigstore-demo,
+#   3. pulls + verifies it in a separate job, asserting cert identity +
+#      OIDC issuer match this workflow's ambient OIDC identity.
+#
+# Production keyless signing (when a release is cut) should not use the
+# staging instance; that wiring is separate from this demo.
+
+name: sigstore-demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # required for ambient OIDC -> Fulcio
+      packages: write    # required to push to ghcr.io/<owner>/...
+      contents: read
+    outputs:
+      ref: ${{ steps.sign.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Build hanko
+        run: go build -o ./bin/hanko ./cmd/hanko
+
+      - name: Stub lm_eval on PATH
+        # The demo workflow doesn't need to run a real eval; it needs a
+        # populated RunContext. We stand in a fake lm_eval binary that
+        # writes a fixture results JSON when invoked. The fields hanko
+        # cares about (git_hash, task results, versions, config) are
+        # filled with plausible values.
+        run: |
+          mkdir -p ./bin
+          cat > ./bin/lm_eval <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          out=""
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --output_path) out="$2"; shift 2 ;;
+              *) shift ;;
+            esac
+          done
+          mkdir -p "$out"
+          cat > "$out/results_demo.json" <<JSON
+          {
+            "results": {
+              "demo": {"acc,none": 0.7321, "acc_stderr,none": 0.0042}
+            },
+            "versions": {"demo": 1},
+            "config": {"model": "stub", "model_args": "pretrained=hanko-demo/model", "batch_size": 1},
+            "git_hash": "0000000000000000000000000000000000000001",
+            "transformers_version": "stub"
+          }
+          JSON
+          EOF
+          chmod +x ./bin/lm_eval
+          echo "${{ github.workspace }}/bin" >> "$GITHUB_PATH"
+
+      - name: docker login ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: hanko run --sigstore (staging)
+        id: sign
+        env:
+          # Stable, lowercased OCI ref so verify can find it from the
+          # follow-on job. ghcr.io requires lowercase paths.
+          REF: ghcr.io/${{ github.repository_owner }}/hanko-sigstore-demo:latest
+        run: |
+          ref_lc=$(echo "${REF}" | tr '[:upper:]' '[:lower:]')
+          ./bin/hanko run \
+            --harness lm-evaluation-harness \
+            --model hanko-demo/model \
+            --task demo \
+            --backend stub \
+            --sigstore \
+            --sigstore-staging \
+            --output "oci://${ref_lc}"
+          echo "ref=${ref_lc}" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: sign-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Build hanko
+        run: go build -o ./bin/hanko ./cmd/hanko
+      - name: docker login ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: hanko verify
+        env:
+          REF: ${{ needs.sign-and-push.outputs.ref }}
+          # The SAN baked into the cert by Fulcio for a GitHub Actions
+          # workflow is the workflow file URI + ref. The OIDC issuer is
+          # GitHub Actions' constant token URL.
+          IDENT: https://github.com/${{ github.repository }}/.github/workflows/sigstore-demo.yml@refs/heads/${{ github.ref_name }}
+          ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          ./bin/hanko verify "oci://${REF}" \
+            --certificate-identity "${IDENT}" \
+            --certificate-oidc-issuer "${ISSUER}" \
+            --sigstore-staging

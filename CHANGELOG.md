@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the project is pre-1.0 the on-wire schema may change between minor
 versions; consumers should pin against the bundle version they tested.
 
+## [Unreleased]
+
+### Added
+
+- **Sigstore keyless signing** (`--sigstore` on `hanko run`) — replaces
+  long-lived Ed25519 keys with an ephemeral keypair plus a 10-minute
+  Fulcio-issued X.509 cert bound to the producer's OIDC identity, signed
+  and logged to Rekor. OIDC token is sourced from `--sigstore-id-token`,
+  `$SIGSTORE_ID_TOKEN`, or GitHub Actions ambient OIDC, in that order.
+  The bundle is published under a new OCI layer media type
+  `application/vnd.dev.hanko.evalrun.sigstore.v1+json`; v0.1 BYO-key
+  bundles (`application/vnd.dev.hanko.evalrun.dsse.v1+json`) remain
+  fully supported.
+- **`hanko verify --certificate-identity --certificate-oidc-issuer`** —
+  Sigstore-bundle verification path. Validates the Fulcio cert chain
+  against the trusted root (fetched via TUF on first run), enforces
+  cert-SAN + OIDC-issuer policy, requires Rekor inclusion proof and the
+  SCT embedded in the cert, then validates the DSSE signature. Verifier
+  picks the v0.1 or v0.2 path automatically based on the pulled layer's
+  media type.
+- **`.github/workflows/sigstore-demo.yml`** — manual end-to-end smoke
+  test: signs a demo bundle via ambient GitHub Actions OIDC against the
+  **Sigstore staging** instance, pushes to GHCR, then verifies in a
+  separate job asserting the workflow's identity matches. Staging-only,
+  so demo runs don't pollute the production Rekor log.
+- Default OCI auth flows through the docker keychain, so
+  `docker login ghcr.io` (or equivalent) is honored by `hanko run --output`
+  and `hanko verify` transparently.
+
 ## [0.1.0] — 2026-05-16
 
 The end-to-end pipeline ships. `hanko run` invokes an evaluation harness,
