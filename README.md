@@ -17,11 +17,28 @@ LLM eval scores cited in papers, leaderboards, and release notes today come with
 
 ## Status
 
-**Pre-alpha.** v0.1 scaffold under construction. See [scope.md](./docs/scope.md) for the MVP plan.
+**Pre-alpha.** v0.1 in active development.
+
+| Milestone | Status |
+|---|---|
+| Week 1 — scaffold, `EvalRun` predicate spec, run-context capture | ✅ |
+| Week 2 — lm-evaluation-harness adapter | ✅ |
+| Week 3 — in-toto / DSSE / Sigstore signing + OCI publish + verify | ⏳ |
+| Week 4 — determinism verification (vLLM batch-invariant detection + double-run check) | ⏳ |
 
 ## Quick start
 
-Not yet — check back at v0.1.0.
+Until the signing pipeline lands in week 3 there's no `verify` story, but you can already invoke a harness and inspect the populated context:
+
+```sh
+# Dry-run: capture the canonical context without running the harness.
+hanko run --model meta-llama/Llama-3.1-8B --task mmlu --dry-run
+
+# Real run: invokes lm-evaluation-harness (must be on PATH).
+hanko run --model meta-llama/Llama-3.1-8B --task mmlu --backend vllm
+```
+
+The non-dry-run form prints the full populated `EvalRun` JSON — model, benchmark, runtime, hardware, results, timestamps. In week 3 that JSON becomes the predicate inside a signed, OCI-distributed bundle.
 
 ## License
 
