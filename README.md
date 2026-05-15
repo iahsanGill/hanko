@@ -5,40 +5,95 @@
 `hanko` wraps an existing LLM evaluation harness (initially [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)) and produces a verifiable bundle that anyone can independently check:
 
 - **Canonical run context** — model digest, harness commit, runtime config, hardware fingerprint, all pinned
-- **Determinism verification** — confirms batch-invariant kernels engaged, seeds honored, batch size pinned
-- **Signed attestation** — in-toto v1 Statement wrapping an `EvalRun` predicate, signed via Sigstore keyless
-- **OCI-native distribution** — bundles ship as content-addressed OCI artifacts in any registry
+- **Determinism verification** — opt-in double-run check that asserts the aggregate primary score is byte-equal across two invocations
+- **Signed attestation** — in-toto v1 Statement wrapping an `EvalRun` predicate, signed in a DSSE envelope with a local Ed25519 key
+- **OCI-native distribution** — bundles ship as content-addressed OCI artifacts in any registry (GHCR, ECR, GAR, self-hosted, …)
 
 ## Why
 
-LLM eval scores cited in papers, leaderboards, and release notes today come with no proof. Run the same MMLU on the same Llama-3.1-8B twice and you get different numbers ([Thinking Machines, 2025](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)). Run it across two harnesses and you get different numbers. UC Berkeley showed in April 2026 that [eight major benchmarks can be exploited to 100% scores](https://rdi.berkeley.edu/blog/trustworthy-benchmarks-cont/) without solving any tasks.
+LLM eval scores cited in papers, leaderboards, and release notes today come with no proof. Run the same MMLU on the same Llama-3.1-8B twice and you can get different numbers ([Thinking Machines, 2025](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)). Run it across two harnesses and you get different numbers. UC Berkeley showed in April 2026 that [eight major agent benchmarks can be exploited to 100% scores](https://rdi.berkeley.edu/blog/trustworthy-benchmarks-cont/) without solving any tasks.
 
 `hanko` puts a cryptographic seal on eval results so the score in your README is verifiable, not vibes.
 
 ## Status
 
-**Pre-alpha.** v0.1 in active development.
+**v0.1** — the end-to-end pipeline ships:
 
-| Milestone | Status |
+| Capability | Status |
 |---|---|
-| Week 1 — scaffold, `EvalRun` predicate spec, run-context capture | ✅ |
-| Week 2 — lm-evaluation-harness adapter | ✅ |
-| Week 3 — in-toto / DSSE / Sigstore signing + OCI publish + verify | ⏳ |
-| Week 4 — determinism verification (vLLM batch-invariant detection + double-run check) | ⏳ |
+| `EvalRun` in-toto v1 predicate spec | ✅ |
+| Canonical run-context capture (model · benchmark · runtime · hardware) | ✅ |
+| lm-evaluation-harness adapter | ✅ |
+| Ed25519 keypair generation | ✅ |
+| DSSE-signed attestation + OCI artifact push | ✅ |
+| `hanko verify` against a published bundle | ✅ |
+| `--determinism-check` (double-run aggregate-score equality) | ✅ |
+| Sigstore keyless signing (Fulcio + Rekor) | planned for v0.2 |
+| Cross-harness adapters (HELM, Inspect AI, DeepEval) | planned for v0.2 |
+| BenchJack integrity-guard integration | depends on upstream release |
 
 ## Quick start
 
-Until the signing pipeline lands in week 3 there's no `verify` story, but you can already invoke a harness and inspect the populated context:
+```sh
+# 1. Mint a signing keypair (PKCS8 PEM private, PKIX PEM public).
+hanko key gen --out hanko.key
+
+# 2. Run an eval, sign the result, push as an OCI artifact.
+hanko run \
+  --model meta-llama/Llama-3.1-8B \
+  --task mmlu \
+  --backend vllm \
+  --determinism-check \
+  --output oci://ghcr.io/you/evals/llama-3.1-8b-mmlu:v1 \
+  --key hanko.key
+
+# 3. Anyone can independently verify the published bundle.
+hanko verify oci://ghcr.io/you/evals/llama-3.1-8b-mmlu:v1 \
+  --public-key hanko.key.pub
+```
+
+Sample `verify` output:
+
+```
+Verified bundle: ghcr.io/you/evals/llama-3.1-8b-mmlu:v1
+
+  Model:     meta-llama/Llama-3.1-8B (huggingface)
+  Benchmark: lm-evaluation-harness/mmlu @ commit 1a2b3c4d5e6f
+  Runtime:   vllm transformers/4.40.0 · seed=42 · batch=32 · batch-invariant=true
+  Hardware:  darwin/arm64/10-core
+  Result:    acc = 0.6826 (stderr 0.0040)
+  Determinism: passed (double-run-score-equal)
+```
+
+### Other modes
 
 ```sh
-# Dry-run: capture the canonical context without running the harness.
+# Dry-run: capture the run context without invoking the harness.
 hanko run --model meta-llama/Llama-3.1-8B --task mmlu --dry-run
 
-# Real run: invokes lm-evaluation-harness (must be on PATH).
+# Inspect mode: run the harness but skip signing/publishing.
 hanko run --model meta-llama/Llama-3.1-8B --task mmlu --backend vllm
 ```
 
-The non-dry-run form prints the full populated `EvalRun` JSON — model, benchmark, runtime, hardware, results, timestamps. In week 3 that JSON becomes the predicate inside a signed, OCI-distributed bundle.
+## Predicate schema
+
+The signed payload is an in-toto v1 Statement carrying an `EvalRun` predicate. See [spec/eval-run-v1.md](./spec/eval-run-v1.md) for the field-by-field semantics. The schema is in draft and may change before stable; consumers verifying bundles should pin against the version they tested.
+
+## Architecture
+
+```
+┌───────────────────────────────────────────────────────────┐
+│  EVAL HARNESSES (run the actual eval)                     │
+│  lm-evaluation-harness · (HELM · Inspect AI · …)          │
+└───────────────────────────────────────────────────────────┘
+                          ↓ hanko ↓
+┌───────────────────────────────────────────────────────────┐
+│  ATTESTATION ECOSYSTEM (sign · verify · distribute)       │
+│  in-toto · DSSE · Sigstore · OCI registries               │
+└───────────────────────────────────────────────────────────┘
+```
+
+`pkg/runner` defines the harness seam; `pkg/runner/lmeval` implements the lm-evaluation-harness adapter (subprocess + JSON parse). `pkg/attest` builds the in-toto Statement and produces a DSSE-signed envelope. `pkg/bundle` packages the envelope as a single-layer OCI artifact. `pkg/determinism` implements the double-run score-equality check.
 
 ## License
 

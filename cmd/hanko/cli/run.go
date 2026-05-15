@@ -16,11 +16,15 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/iahsanGill/hanko/internal/version"
+	"github.com/iahsanGill/hanko/pkg/attest"
+	"github.com/iahsanGill/hanko/pkg/bundle"
 	hkctx "github.com/iahsanGill/hanko/pkg/context"
+	"github.com/iahsanGill/hanko/pkg/determinism"
 	"github.com/iahsanGill/hanko/pkg/runner"
 	// Side-effect import: registers the lm-evaluation-harness adapter
 	// under its canonical name. Adding more harness packages here is how
@@ -43,8 +47,10 @@ type runOpts struct {
 	batchInvariantKernels bool
 	backend               string
 
-	dryRun bool
-	output string
+	dryRun           bool
+	output           string
+	keyPath          string
+	determinismCheck bool
 }
 
 func newRunCmd() *cobra.Command {
@@ -53,12 +59,20 @@ func newRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run an eval and produce a signed bundle",
 		Long: `run invokes an evaluation harness against a model, captures the
-canonical run context, signs the result with Sigstore, and publishes the
-bundle as an OCI artifact at --output.
+canonical run context, signs the resulting EvalRun Statement with the
+caller's Ed25519 key, and publishes the DSSE envelope as an OCI
+artifact at --output.
 
-In v0.1 only --dry-run is fully wired: it captures and prints the context
-without invoking the harness. The harness adapter and signing/push pipeline
-land in subsequent v0.1 milestones.`,
+Modes:
+  --dry-run                  capture & print the run context without
+                             invoking the harness.
+  (no --output, no --key)    invoke the harness and print the populated
+                             EvalRun context as JSON. Useful for
+                             inspection or piping into another tool.
+  --output --key             invoke the harness, sign with the supplied
+                             private key, push the bundle to the OCI URL.
+
+Sigstore keyless signing lands in v0.2.`,
 		RunE: o.run,
 	}
 	f := cmd.Flags()
@@ -77,6 +91,9 @@ land in subsequent v0.1 milestones.`,
 
 	f.BoolVar(&o.dryRun, "dry-run", false, "Capture and print the run context without invoking the harness")
 	f.StringVarP(&o.output, "output", "o", "", "OCI URL to publish the signed bundle, e.g. oci://ghcr.io/user/evals/run-name")
+	f.StringVar(&o.keyPath, "key", "", "Path to an Ed25519 PEM private key for signing (PKCS8). Required when --output is set.")
+	f.BoolVar(&o.determinismCheck, "determinism-check", false,
+		"Re-run the same eval and assert the aggregate primary score is byte-equal. Doubles the runtime cost; off by default.")
 
 	_ = cmd.MarkFlagRequired("model")
 	_ = cmd.MarkFlagRequired("task")
@@ -84,6 +101,10 @@ land in subsequent v0.1 milestones.`,
 }
 
 func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
+	if err := o.validate(); err != nil {
+		return err
+	}
+
 	ctx := hkctx.Capture(hkctx.CaptureOptions{
 		Model:                 o.model,
 		ModelSource:           o.modelSource,
@@ -100,9 +121,7 @@ func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
 	})
 
 	if o.dryRun {
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(ctx)
+		return writeJSON(cmd.OutOrStdout(), ctx)
 	}
 
 	r, err := runner.Get(o.harness)
@@ -120,10 +139,64 @@ func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// v0.1 milestone for week 2: print the populated EvalRun context.
-	// Signing + OCI push land in week 3. Until then the operator can
-	// pipe this JSON wherever they want.
-	enc := json.NewEncoder(cmd.OutOrStdout())
+	if o.determinismCheck {
+		v := &determinism.Verifier{Runner: r}
+		if err := v.Check(cmd.Context(), &ctx); err != nil {
+			// Recorded as failed in ctx.DeterminismCheck; surface the
+			// inner error for visibility but don't abort — the primary
+			// run still produced a meaningful result the operator can
+			// publish with passed=false documented in the bundle.
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: determinism re-run failed: %v\n", err)
+		}
+	}
+
+	if o.output == "" {
+		// No publish target: print the populated EvalRun context as JSON.
+		return writeJSON(cmd.OutOrStdout(), ctx)
+	}
+
+	// Publish flow: build → sign → push.
+	stmt, err := attest.Build(&ctx)
+	if err != nil {
+		return fmt.Errorf("build statement: %w", err)
+	}
+	payload, err := stmt.Marshal()
+	if err != nil {
+		return fmt.Errorf("marshal statement: %w", err)
+	}
+	priv, err := attest.LoadPrivateKey(o.keyPath)
+	if err != nil {
+		return fmt.Errorf("load private key: %w", err)
+	}
+	env, err := attest.Sign(payload, attest.PayloadTypeURI, priv)
+	if err != nil {
+		return fmt.Errorf("sign: %w", err)
+	}
+	envBytes, err := attest.MarshalEnvelope(env)
+	if err != nil {
+		return fmt.Errorf("marshal envelope: %w", err)
+	}
+	digest, err := bundle.Push(envBytes, o.output)
+	if err != nil {
+		return fmt.Errorf("push bundle: %w", err)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Published bundle: %s@%s\n", bundle.StripScheme(o.output), digest.String())
+	return nil
+}
+
+// validate enforces flag combinations the cobra annotations can't express.
+func (o *runOpts) validate() error {
+	if o.output != "" && o.keyPath == "" {
+		return errors.New("--key is required when --output is set (Sigstore keyless lands in v0.2)")
+	}
+	if o.keyPath != "" && o.output == "" {
+		return errors.New("--key has no effect without --output; remove it or set --output")
+	}
+	return nil
+}
+
+func writeJSON(w interface{ Write(p []byte) (int, error) }, v any) error {
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(ctx)
+	return enc.Encode(v)
 }

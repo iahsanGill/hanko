@@ -40,6 +40,7 @@ See spec/eval-run-v1.md for the predicate schema.`,
 	}
 	cmd.AddCommand(newRunCmd())
 	cmd.AddCommand(newVerifyCmd())
+	cmd.AddCommand(newKeyCmd())
 	cmd.AddCommand(newVersionCmd())
 	return cmd
 }
