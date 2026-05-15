@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "status": "success",
+  "eval": {
+    "eval_id": "Hk-test-eval-id",
+    "run_id": "JxQ-test-run-id",
+    "created": "2026-05-16T10:14:33Z",
+    "task": "inspect_evals/mmlu",
+    "task_id": "abc123",
+    "task_version": 0,
+    "task_file": "mmlu.py",
+    "model": "openai/gpt-4o-mini",
+    "model_generate_config": {"temperature": 0.0, "seed": 42},
+    "dataset": {"name": "mmlu", "samples": 14042},
+    "revision": {
+      "type": "git",
+      "origin": "https://github.com/UKGovernmentBEIS/inspect_evals",
+      "commit": "5f3a9c1d2e8a7b6c4d3e2f1a0b9c8d7e6f5a4b3c",
+      "dirty": false
+    },
+    "packages": {"inspect_ai": "0.3.135"},
+    "config": {"limit": 100, "epochs": 1}
+  },
+  "plan": {"steps": [{"solver": "multiple_choice", "params": {}}]},
+  "results": {
+    "total_samples": 100,
+    "completed_samples": 100,
+    "scores": [
+      {
+        "name": "choice",
+        "scorer": "choice",
+        "reducer": "mean",
+        "scored_samples": 100,
+        "metrics": {
+          "accuracy": {"name": "accuracy", "value": 0.72, "params": {}},
+          "stderr":   {"name": "stderr",   "value": 0.045, "params": {}}
+        }
+      }
+    ]
+  },
+  "stats": {
+    "started_at": "2026-05-16T10:14:33Z",
+    "completed_at": "2026-05-16T10:15:11Z",
+    "model_usage": {
+      "openai/gpt-4o-mini": {
+        "input_tokens": 12000,
+        "output_tokens": 800,
+        "total_tokens": 12800
+      }
+    }
+  },
+  "reductions": [
+    {"scorer": "choice", "reducer": "mean", "samples": [{"sample_id": 0, "value": 1.0}]}
+  ]
+}

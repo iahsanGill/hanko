@@ -26,9 +26,10 @@ import (
 	hkctx "github.com/iahsanGill/hanko/pkg/context"
 	"github.com/iahsanGill/hanko/pkg/determinism"
 	"github.com/iahsanGill/hanko/pkg/runner"
-	// Side-effect import: registers the lm-evaluation-harness adapter
-	// under its canonical name. Adding more harness packages here is how
-	// new harnesses get discovered by the CLI.
+	// Side-effect imports: each adapter package registers itself under
+	// its canonical HarnessName via init(). Adding more harness packages
+	// here is how new harnesses get discovered by the CLI.
+	_ "github.com/iahsanGill/hanko/pkg/runner/inspect"
 	_ "github.com/iahsanGill/hanko/pkg/runner/lmeval"
 	"github.com/spf13/cobra"
 )
