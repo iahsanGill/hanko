@@ -52,7 +52,11 @@ func TestRun_DryRun_EmitsContext(t *testing.T) {
 	}
 }
 
-func TestRun_NoDryRun_NotImplemented(t *testing.T) {
+func TestRun_NoDryRun_RequiresInstalledHarness(t *testing.T) {
+	// Without --dry-run the CLI dispatches to the registered runner.
+	// In a unit-test env the lm_eval binary isn't on PATH, so we expect
+	// a subprocess-execution error (not a "not implemented" stub).
+	// This guards against accidentally re-introducing the v0.0.1 stub.
 	root := Root()
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -61,14 +65,15 @@ func TestRun_NoDryRun_NotImplemented(t *testing.T) {
 		"run",
 		"--model", "m",
 		"--task", "t",
+		"--backend", "vllm",
 	})
 
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected error from non-dry-run, got nil")
+		t.Fatal("expected subprocess error when lm_eval is absent, got nil")
 	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("error should signal not-implemented; got: %v", err)
+	if strings.Contains(err.Error(), "not yet implemented") {
+		t.Errorf("non-dry-run should no longer be a stub: %v", err)
 	}
 }
 

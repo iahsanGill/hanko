@@ -1,0 +1,45 @@
+{
+  "results": {
+    "mmlu": {
+      "acc,none": 0.6826,
+      "acc_stderr,none": 0.00404,
+      "alias": "mmlu"
+    },
+    "mmlu_abstract_algebra": {
+      "acc,none": 0.42,
+      "acc_stderr,none": 0.0496,
+      "alias": " - abstract_algebra"
+    },
+    "mmlu_anatomy": {
+      "acc,none": 0.7111,
+      "acc_stderr,none": 0.0391,
+      "alias": " - anatomy"
+    }
+  },
+  "versions": {
+    "mmlu": 2,
+    "mmlu_abstract_algebra": 2,
+    "mmlu_anatomy": 2
+  },
+  "n-shot": {
+    "mmlu": 0
+  },
+  "higher_is_better": {
+    "mmlu": {"acc": true}
+  },
+  "config": {
+    "model": "vllm",
+    "model_args": "pretrained=meta-llama/Llama-3.1-8B",
+    "batch_size": 32,
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "random_seed": 42,
+    "numpy_seed": 1234,
+    "torch_seed": 1234,
+    "fewshot_seed": 1234
+  },
+  "git_hash": "1a2b3c4d5e6f7890abcdef0123456789abcdef01",
+  "date": 1747350000.123,
+  "transformers_version": "4.45.0"
+}

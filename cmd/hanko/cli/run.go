@@ -17,9 +17,15 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/iahsanGill/hanko/internal/version"
 	hkctx "github.com/iahsanGill/hanko/pkg/context"
+	"github.com/iahsanGill/hanko/pkg/runner"
+	// Side-effect import: registers the lm-evaluation-harness adapter
+	// under its canonical name. Adding more harness packages here is how
+	// new harnesses get discovered by the CLI.
+	_ "github.com/iahsanGill/hanko/pkg/runner/lmeval"
 	"github.com/spf13/cobra"
 )
 
@@ -99,9 +105,25 @@ func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
 		return enc.Encode(ctx)
 	}
 
-	// Non-dry-run execution lands in subsequent milestones: harness
-	// adapter (week 2), attestation + signing + push (week 3),
-	// determinism verification (week 4). Returning an explicit error
-	// here is the right surface for users until those land.
-	return fmt.Errorf("non-dry-run execution is not yet implemented; pass --dry-run to inspect the captured context")
+	r, err := runner.Get(o.harness)
+	if err != nil {
+		return err
+	}
+
+	outDir, err := os.MkdirTemp("", "hanko-eval-*")
+	if err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(outDir) }()
+
+	if err := r.Run(cmd.Context(), &ctx, runner.RunOptions{OutputDir: outDir}); err != nil {
+		return err
+	}
+
+	// v0.1 milestone for week 2: print the populated EvalRun context.
+	// Signing + OCI push land in week 3. Until then the operator can
+	// pipe this JSON wherever they want.
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(ctx)
 }
