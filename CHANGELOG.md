@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the project is pre-1.0 the on-wire schema may change between minor
 versions; consumers should pin against the bundle version they tested.
 
-## [Unreleased]
+## [0.2.0] — 2026-05-16
+
+v0.2 closes the documented v0.1 limitations and lays in the keyless
+signing path. Three new capabilities, one expanded one:
+
+- Keyless signing & verification (Fulcio + Rekor) eliminates the v0.1
+  BYO-keypair UX. Both bundle types remain supported and the verifier
+  dispatches on the OCI layer's media type.
+- A second harness adapter (Inspect AI) validates the runner
+  abstraction in practice — hanko is harness-agnostic, not just in spec.
+- Linux GPU / CUDA / driver hardware probing fills out the predicate
+  for real eval rigs.
+- Production-grade governance: SECURITY.md, CONTRIBUTING.md, CODEOWNERS,
+  PR + issue templates, Dependabot, tag-triggered release workflow, and
+  branch-protection rules on `main` enforced via the GitHub API
+  (PR-only, required `test` + `golangci-lint` checks, linear history,
+  no force-push, no deletion).
 
 ### Added
 
@@ -110,4 +126,5 @@ predicate, and prints a human-readable summary.
 - Hardware probing only records the CPU label on macOS/Linux; GPU /
   CUDA / driver version probing lands in v0.2.
 
+[0.2.0]: https://github.com/iahsanGill/hanko/releases/tag/v0.2.0
 [0.1.0]: https://github.com/iahsanGill/hanko/releases/tag/v0.1.0
