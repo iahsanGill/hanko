@@ -11,6 +11,17 @@ versions; consumers should pin against the bundle version they tested.
 
 ### Added
 
+- **Inspect AI adapter** (`pkg/runner/inspect`) — second harness adapter,
+  registered as `inspect-ai`. Invokes `inspect eval <task> --model
+  <provider>/<name> --log-format json --log-dir <out>`, parses the
+  resulting `EvalLog v2` JSON, and populates `Results`,
+  `Benchmark.HarnessCommit` (from `eval.revision.commit`),
+  `Benchmark.TaskVersion`, and `Runtime.BackendVersion`
+  (`inspect_ai/<version>` from `eval.packages`). Refuses to record runs
+  whose `status` is not `success`. Provider prefix (`openai/`,
+  `anthropic/`, `hf/`, …) is preserved when the caller passes an
+  already-qualified `--model` and synthesized from `--backend + --model`
+  otherwise.
 - **Sigstore keyless signing** (`--sigstore` on `hanko run`) — replaces
   long-lived Ed25519 keys with an ephemeral keypair plus a 10-minute
   Fulcio-issued X.509 cert bound to the producer's OIDC identity, signed

@@ -30,7 +30,8 @@ keyless signing is wired:
 | `hanko verify` against a published bundle | ✅ |
 | `--determinism-check` (double-run aggregate-score equality) | ✅ |
 | Sigstore keyless signing (Fulcio + Rekor) | ✅ (v0.2) |
-| Cross-harness adapters (HELM, Inspect AI, DeepEval) | planned for v0.2 |
+| Inspect AI adapter | ✅ (v0.2) |
+| HELM / DeepEval adapters | planned post-v0.2 |
 | GPU / CUDA / driver hardware probing | planned for v0.2 |
 | BenchJack integrity-guard integration | depends on upstream release |
 
