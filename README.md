@@ -32,7 +32,7 @@ keyless signing is wired:
 | Sigstore keyless signing (Fulcio + Rekor) | ✅ (v0.2) |
 | Inspect AI adapter | ✅ (v0.2) |
 | HELM / DeepEval adapters | planned post-v0.2 |
-| GPU / CUDA / driver hardware probing | planned for v0.2 |
+| GPU / CUDA / driver hardware probing (Linux) | ✅ (v0.2) |
 | BenchJack integrity-guard integration | depends on upstream release |
 
 ## Quick start

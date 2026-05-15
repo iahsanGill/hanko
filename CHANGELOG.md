@@ -11,6 +11,15 @@ versions; consumers should pin against the bundle version they tested.
 
 ### Added
 
+- **Linux GPU / CUDA / driver hardware probing** — `probeHardware()` now
+  shells out to `nvidia-smi --query-gpu=name,driver_version
+  --format=csv,noheader,nounits` (with a 5-second timeout) and parses
+  the CUDA version off the human-readable banner, populating
+  `Hardware.GPU`, `Hardware.GPUCount`, `Hardware.DriverVersion`, and
+  `Hardware.CUDAVersion`. The probe seam is an injectable package-level
+  function so tests don't need NVIDIA hardware. Missing `nvidia-smi` or
+  a non-Linux host is treated as "no GPU" — not an error — so CPU-only
+  and hosted-API runs still produce clean bundles.
 - **Inspect AI adapter** (`pkg/runner/inspect`) — second harness adapter,
   registered as `inspect-ai`. Invokes `inspect eval <task> --model
   <provider>/<name> --log-format json --log-dir <out>`, parses the
