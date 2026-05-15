@@ -1,0 +1,9 @@
+# Disable blank issues — every issue should fit one of the templates,
+# or be a Q&A discussion. This nudges users toward giving us the context
+# we'd otherwise have to ask for in a back-and-forth.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/iahsanGill/hanko/security/advisories/new
+    about: Report privately via GitHub Security Advisories. Do NOT open a public issue.

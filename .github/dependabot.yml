@@ -1,0 +1,58 @@
+# Dependabot keeps go modules and GitHub Actions versions current.
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Notes:
+#   * Weekly cadence avoids drowning a small project in PR noise while
+#     still catching CVEs within seven days.
+#   * The sigstore-go upgrade path matters for hanko's security story —
+#     it's tagged with `signing` for easy filtering.
+#   * Major bumps are grouped per ecosystem so they land as a single
+#     reviewable PR rather than one PR per dep.
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      sigstore:
+        patterns:
+          - "github.com/sigstore/*"
+          - "github.com/theupdateframework/*"
+        update-types:
+          - minor
+          - patch
+      registry:
+        patterns:
+          - "github.com/google/go-containerregistry"
+        update-types:
+          - minor
+          - patch
+      indirect:
+        dependency-type: indirect
+        update-types:
+          - patch
+    commit-message:
+      prefix: "chore(deps): "
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(actions): "

@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose something hanko should do that it doesn't yet.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the use case. The "why" is more important than the "what" — we'll figure out the best shape together.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: How you'd like it to work. Sketch the CLI surface, the spec change, the bundle field — whatever is concrete.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds, tools that solve adjacent problems, or other shapes you considered and ruled out.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope guess
+      options:
+        - "Small (≤1 day): a flag, a doc, a small adapter improvement"
+        - "Medium (1–3 days): a new harness adapter, a new subcommand"
+        - "Large (>3 days): a new signing mode, a spec rev, a major capability"
+    validations:
+      required: true
