@@ -1,0 +1,35 @@
+// Copyright 2026 The Hanko Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cli
+
+import (
+	"fmt"
+
+	"github.com/iahsanGill/hanko/internal/version"
+	"github.com/spf13/cobra"
+)
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the hanko version",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "hanko %s (commit %s, built %s)\n",
+				version.Version, version.Commit, version.BuildDate)
+			return nil
+		},
+	}
+}
