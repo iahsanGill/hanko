@@ -17,7 +17,8 @@ LLM eval scores cited in papers, leaderboards, and release notes today come with
 
 ## Status
 
-**v0.1** — the end-to-end pipeline ships:
+**v0.1** — the end-to-end pipeline ships. **v0.2 (in progress)** —
+keyless signing is wired:
 
 | Capability | Status |
 |---|---|
@@ -28,8 +29,9 @@ LLM eval scores cited in papers, leaderboards, and release notes today come with
 | DSSE-signed attestation + OCI artifact push | ✅ |
 | `hanko verify` against a published bundle | ✅ |
 | `--determinism-check` (double-run aggregate-score equality) | ✅ |
-| Sigstore keyless signing (Fulcio + Rekor) | planned for v0.2 |
+| Sigstore keyless signing (Fulcio + Rekor) | ✅ (v0.2) |
 | Cross-harness adapters (HELM, Inspect AI, DeepEval) | planned for v0.2 |
+| GPU / CUDA / driver hardware probing | planned for v0.2 |
 | BenchJack integrity-guard integration | depends on upstream release |
 
 ## Quick start
@@ -64,6 +66,33 @@ Verified bundle: ghcr.io/you/evals/llama-3.1-8b-mmlu:v1
   Result:    acc = 0.6826 (stderr 0.0040)
   Determinism: passed (double-run-score-equal)
 ```
+
+### Keyless (Sigstore) signing — v0.2
+
+No keypair, no public key exchange. `hanko run --sigstore` mints an
+ephemeral keypair, requests a 10-minute Fulcio cert bound to the
+producer's OIDC identity, signs the DSSE envelope, and logs the
+signature to Rekor. Verifiers check the cert chain + identity claim
+against the Sigstore trusted root.
+
+```sh
+# In a CI job with `permissions: id-token: write`, hanko picks up the
+# ambient OIDC token automatically — no flag plumbing needed.
+hanko run \
+  --model meta-llama/Llama-3.1-8B \
+  --task mmlu \
+  --backend vllm \
+  --sigstore \
+  --output oci://ghcr.io/you/evals/llama-3.1-8b-mmlu:v1
+
+# Verify with the expected workflow identity + GitHub Actions issuer.
+hanko verify oci://ghcr.io/you/evals/llama-3.1-8b-mmlu:v1 \
+  --certificate-identity "https://github.com/you/repo/.github/workflows/eval.yml@refs/heads/main" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+A full end-to-end smoke test (sign on staging Sigstore + push to GHCR +
+verify) lives in [.github/workflows/sigstore-demo.yml](./.github/workflows/sigstore-demo.yml).
 
 ### Other modes
 

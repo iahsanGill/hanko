@@ -247,7 +247,7 @@ func TestE2E_RunOutputRequiresKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected --output without --key to be rejected")
 	}
-	if !strings.Contains(err.Error(), "--key is required") {
-		t.Errorf("error should mention --key required: %v", err)
+	if !strings.Contains(err.Error(), "requires a signing mode") {
+		t.Errorf("error should mention a signing mode is required: %v", err)
 	}
 }

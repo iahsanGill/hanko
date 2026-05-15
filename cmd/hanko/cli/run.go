@@ -51,6 +51,11 @@ type runOpts struct {
 	output           string
 	keyPath          string
 	determinismCheck bool
+
+	// Keyless (Sigstore) signing.
+	sigstore           bool
+	sigstoreIDToken    string
+	sigstoreUseStaging bool
 }
 
 func newRunCmd() *cobra.Command {
@@ -59,20 +64,25 @@ func newRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run an eval and produce a signed bundle",
 		Long: `run invokes an evaluation harness against a model, captures the
-canonical run context, signs the resulting EvalRun Statement with the
-caller's Ed25519 key, and publishes the DSSE envelope as an OCI
-artifact at --output.
+canonical run context, signs the resulting EvalRun Statement, and
+publishes the result as an OCI artifact at --output.
 
-Modes:
+Signing modes:
+  --key <path>      sign with a long-lived Ed25519 keypair (v0.1 path).
+                    Verifiers need the matching public key out of band.
+  --sigstore        sign keyless via Sigstore: an ephemeral keypair is
+                    minted, Fulcio issues a 10-minute X.509 cert bound to
+                    your OIDC identity, the DSSE envelope is signed and
+                    logged to Rekor. Verifiers need only the expected
+                    identity + issuer, no key exchange. The OIDC token is
+                    sourced from --sigstore-id-token, $SIGSTORE_ID_TOKEN,
+                    or GitHub Actions ambient OIDC, in that order.
+
+Other modes:
   --dry-run                  capture & print the run context without
                              invoking the harness.
-  (no --output, no --key)    invoke the harness and print the populated
-                             EvalRun context as JSON. Useful for
-                             inspection or piping into another tool.
-  --output --key             invoke the harness, sign with the supplied
-                             private key, push the bundle to the OCI URL.
-
-Sigstore keyless signing lands in v0.2.`,
+  (no --output)              invoke the harness and print the populated
+                             EvalRun context as JSON.`,
 		RunE: o.run,
 	}
 	f := cmd.Flags()
@@ -94,6 +104,13 @@ Sigstore keyless signing lands in v0.2.`,
 	f.StringVar(&o.keyPath, "key", "", "Path to an Ed25519 PEM private key for signing (PKCS8). Required when --output is set.")
 	f.BoolVar(&o.determinismCheck, "determinism-check", false,
 		"Re-run the same eval and assert the aggregate primary score is byte-equal. Doubles the runtime cost; off by default.")
+
+	f.BoolVar(&o.sigstore, "sigstore", false,
+		"Sign keyless via Sigstore (Fulcio + Rekor). Mutually exclusive with --key.")
+	f.StringVar(&o.sigstoreIDToken, "sigstore-id-token", "",
+		"OIDC token for Sigstore. Falls back to $SIGSTORE_ID_TOKEN, then GitHub Actions ambient OIDC.")
+	f.BoolVar(&o.sigstoreUseStaging, "sigstore-staging", false,
+		"Route Sigstore signing through the staging instance (does not write to production Rekor).")
 
 	_ = cmd.MarkFlagRequired("model")
 	_ = cmd.MarkFlagRequired("task")
@@ -164,19 +181,36 @@ func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("marshal statement: %w", err)
 	}
-	priv, err := attest.LoadPrivateKey(o.keyPath)
-	if err != nil {
-		return fmt.Errorf("load private key: %w", err)
+
+	var layerBytes []byte
+	var layerType string
+	switch {
+	case o.sigstore:
+		layerBytes, err = attest.SignKeyless(cmd.Context(), payload, attest.PayloadTypeURI, attest.KeylessSignOptions{
+			IDToken:    o.sigstoreIDToken,
+			UseStaging: o.sigstoreUseStaging,
+		})
+		if err != nil {
+			return fmt.Errorf("sigstore sign: %w", err)
+		}
+		layerType = bundle.SigstoreLayerMediaType
+	default:
+		priv, err := attest.LoadPrivateKey(o.keyPath)
+		if err != nil {
+			return fmt.Errorf("load private key: %w", err)
+		}
+		env, err := attest.Sign(payload, attest.PayloadTypeURI, priv)
+		if err != nil {
+			return fmt.Errorf("sign: %w", err)
+		}
+		layerBytes, err = attest.MarshalEnvelope(env)
+		if err != nil {
+			return fmt.Errorf("marshal envelope: %w", err)
+		}
+		layerType = bundle.LayerMediaType
 	}
-	env, err := attest.Sign(payload, attest.PayloadTypeURI, priv)
-	if err != nil {
-		return fmt.Errorf("sign: %w", err)
-	}
-	envBytes, err := attest.MarshalEnvelope(env)
-	if err != nil {
-		return fmt.Errorf("marshal envelope: %w", err)
-	}
-	digest, err := bundle.Push(envBytes, o.output)
+
+	digest, err := bundle.PushTyped(layerBytes, o.output, layerType)
 	if err != nil {
 		return fmt.Errorf("push bundle: %w", err)
 	}
@@ -186,11 +220,17 @@ func (o *runOpts) run(cmd *cobra.Command, _ []string) error {
 
 // validate enforces flag combinations the cobra annotations can't express.
 func (o *runOpts) validate() error {
-	if o.output != "" && o.keyPath == "" {
-		return errors.New("--key is required when --output is set (Sigstore keyless lands in v0.2)")
+	if o.keyPath != "" && o.sigstore {
+		return errors.New("--key and --sigstore are mutually exclusive; pick one signing mode")
+	}
+	if o.output != "" && o.keyPath == "" && !o.sigstore {
+		return errors.New("--output requires a signing mode: --key <path> or --sigstore")
 	}
 	if o.keyPath != "" && o.output == "" {
 		return errors.New("--key has no effect without --output; remove it or set --output")
+	}
+	if o.sigstore && o.output == "" {
+		return errors.New("--sigstore has no effect without --output; remove it or set --output")
 	}
 	return nil
 }

@@ -142,13 +142,37 @@ Statements are signed using [DSSE](https://github.com/secure-systems-lab/dsse) w
 
 ## Identity binding
 
-Signatures use [Sigstore keyless](https://docs.sigstore.dev/cosign/signing/overview/) by default, binding to the producer's OIDC identity (GitHub Actions Workload Identity, Google Workload Identity, etc.). Long-lived keys are supported via `--key`.
+Two signing modes are supported, distinguished at the OCI layer.
+
+**Sigstore keyless** (`--sigstore`, recommended). An ephemeral keypair is
+minted, Fulcio issues a 10-minute X.509 cert bound to the producer's
+OIDC identity (GitHub Actions Workload Identity, Google Workload
+Identity, etc.), the DSSE envelope is signed with that ephemeral key,
+and the signature is logged to Rekor. The published OCI layer carries
+the JSON-serialized Sigstore bundle (cert chain + DSSE envelope + Rekor
+inclusion proof) under media type
+`application/vnd.dev.hanko.evalrun.sigstore.v1+json`.
+
+**Long-lived Ed25519 keys** (`--key`, v0.1 compatibility). The DSSE
+envelope is signed directly with a PEM-encoded Ed25519 keypair the
+producer manages out of band. The OCI layer carries the raw DSSE
+envelope JSON under media type
+`application/vnd.dev.hanko.evalrun.dsse.v1+json`.
+
+Verifiers dispatch on the layer media type. Both bundle types carry the
+same in-toto Statement inside; the only difference is how identity is
+established.
 
 ## Verification semantics
 
 A verifier MUST:
 
-1. Validate the DSSE signature against the claimed identity.
+1. For Sigstore-keyless bundles: validate the Fulcio cert chain against
+   the Sigstore trusted root, enforce the producer-supplied SAN + OIDC
+   issuer policy on the cert, validate the Rekor inclusion proof, and
+   validate the embedded SCT — in addition to the DSSE signature.
+   For long-lived-key bundles: validate the DSSE signature against the
+   provided public key.
 2. Validate the Statement schema (in-toto v1).
 3. Validate the predicate matches this schema.
 4. Surface `determinismCheck.passed = false` prominently; a non-deterministic run is not a trust failure but consumers must know.
