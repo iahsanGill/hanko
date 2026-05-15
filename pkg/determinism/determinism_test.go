@@ -30,9 +30,9 @@ import (
 // callers can assert the Limit-to-flag plumbing without coupling to
 // any specific harness adapter.
 type fakeRunner struct {
-	score          float64
-	failWith       error
-	lastExtraArgs  []string
+	score         float64
+	failWith      error
+	lastExtraArgs []string
 }
 
 func (f *fakeRunner) Name() string { return "fake-determinism" }
